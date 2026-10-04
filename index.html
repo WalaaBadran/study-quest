@@ -429,6 +429,9 @@ const T = {
     pq_checkedW: 'The handwritten answer was checked by working it through and is correct.',
     pq_noAns: 'The book has no handwritten answer for this question. {note}', pq_partial: 'Part of the original question: {note}',
     pq_fix: 'Correction:',
+    pq_open: 'Open the paper (PDF)', pq_openMs: 'Mark scheme (PDF)', pq_doQ: 'Answer question {n} in this paper.',
+    pq_noPaper: 'This paper is not available online.', pq_noMs: 'No official mark scheme is published online for this paper.',
+    pq_tip: 'Answer note:', pq_checkMs: 'Check your answer with the official mark scheme.', pqx_doQ: 'Question {n} of the paper: {url}',
     pqx: 'Printable exam', pqxDesc: 'Pick topics and difficulty, and the app builds an exam from your past-paper questions to print.',
     pqx_topics: 'Topics (pick one or more, or none for all)', pqx_diffs: 'Difficulty (pick one or more, or none for all)', pqx_n: 'Number of questions',
     pqx_opts: 'Options', pqx_fresh: 'Questions not tried yet first', pqx_ans: 'Worked answers at the end', pqx_ms: 'Mark-scheme answers at the end',
@@ -1719,6 +1722,12 @@ const DIFFS = ['easy', 'medium', 'hard', 'vhard'];
 const dband = g => (g <= 3 ? 'easy' : g <= 5 ? 'medium' : g <= 7 ? 'hard' : 'vhard');
 /* Past-paper questions: page images listed in papers/index.js, made by tools/papers.py from the family's scans */
 const PQ = ((window.PAPERS_INDEX || {}).questions || []).filter(q => TOPICS.math.includes(q.tp) && q.g >= 1 && q.g <= 9);
+// the public version has no scanned pages: each question links to the official paper and mark scheme
+if (PQ.length && !PQ.some(q => q.img)) Object.assign(T.en, {
+  pqDesc: 'Real exam questions sorted by topic and difficulty, with links to the official papers and mark schemes.',
+  pqxDesc: 'Pick topics and difficulty, and the app builds a list of past-paper questions to do, with links to the papers.',
+  pqx_ans: 'Mark-scheme links at the end',
+});
 const pqTierOf = p => (mathCourse(p) === 'F' ? 'F' : 'H');
 // Foundation also lists Higher-paper questions at grade 5 or below, since those topics are on both tiers.
 const pqInTier = (q, tier) => !tier || q.tier === tier || (tier === 'F' && q.g <= 5);
@@ -2290,11 +2299,11 @@ function vPQ() {
         ${q.spec === 'GCSE' ? `<span class="pill soft">${t('pq_gcse')}</span>` : q.spec && q.spec !== '4MA1' ? `<span class="pill soft">${t('pq_old', { s: esc(q.spec) })}</span>` : ''}
         ${last && !z.marked ? `<span class="pill soft">${t(last.ok ? 'pq_lastR' : 'pq_lastW')}</span>` : ''}
       </div>
-      ${pages(q.img, t('pq_alt', { n: q.q }))}
+      ${q.img ? pages(q.img, t('pq_alt', { n: q.q })) : pqLinkCard(q)}
       ${pqPartialNote(q)}
-      <p class="small muted">${t('pq_zoom')}</p>
+      ${q.img ? `<p class="small muted">${t('pq_zoom')}</p>` : ''}
       <div class="row"><button class="btn ghost" data-act="pqAns" aria-expanded="${z.show}">${t(z.show ? 'hideAnswer' : 'showAnswer')}</button></div>
-      ${z.show ? pqMarkScheme(q) + pages(q.aimg, t('pq_altA', { n: q.q })) : ''}
+      ${z.show ? pqMarkScheme(q) + (q.aimg ? pages(q.aimg, t('pq_altA', { n: q.q })) : '') : ''}
       ${marking}
       <div class="row">
         <button class="btn ghost" data-act="pqPrev"${z.i === 0 ? ' disabled' : ''}>${t('prev')}</button>
@@ -2309,6 +2318,10 @@ const pqNote = q => (db.lang === 'ar' && q.note_ar) || q.note || '';
 const pqPartial = q => (db.lang === 'ar' && q.partial_ar) || q.partial || '';
 /* Official mark-scheme answer for a question (from the Pearson mark scheme), and whether the handwritten answer agrees */
 function pqMarkScheme(q) {
+  if (!q.img) {  // the public version links to the official papers instead of showing the scanned pages
+    return `<div class="note small pq-ms">${q.note ? `<b>${t('pq_tip')}</b> ${esc(q.note)}<br>` : ''}
+      ${q.msUrl ? `${t('pq_checkMs')} <a href="${esc(q.msUrl)}" target="_blank" rel="noopener">${t('pq_openMs')}</a>` : t('pq_noMs')}</div>`;
+  }
   const differs = q.check === 'differs', none = q.check === 'missing';
   const verdict = differs ? `<b>${esc(t('pq_differs', { note: pqNote(q) }))}</b>`
     : none ? `<b>${esc(t('pq_noAns', { note: pqNote(q) }))}</b>`
@@ -2317,6 +2330,10 @@ function pqMarkScheme(q) {
   return `<div class="note small pq-ms${differs || none ? ' differs' : ''}">${q.ms ? `<b>${t('pq_msAns')}</b> <span dir="ltr" lang="en">${esc(q.ms)}</span>` : ''}
     ${q.ms && verdict ? '<br>' : ''}${verdict}</div>`;
 }
+/* Public version: the question is read from the official paper, opened from a link */
+const pqLinkCard = q => `<div class="note pq-link">${q.qpUrl
+  ? `<p>${t('pq_doQ', { n: q.q })}</p><div class="row"><a class="btn" href="${esc(q.qpUrl)}" target="_blank" rel="noopener">${t('pq_open')}</a>${q.msUrl ? `<a class="btn ghost" href="${esc(q.msUrl)}" target="_blank" rel="noopener">${t('pq_openMs')}</a>` : ''}</div>`
+  : t('pq_noPaper')}</div>`;
 /* Some questions in the book are only part of the original exam question */
 const pqPartialNote = q => q.partial ? `<p class="note small">${esc(t('pq_partial', { note: pqPartial(q) }))}</p>` : '';
 
@@ -2352,13 +2369,14 @@ function vPQX() {
       ${qs.map((q, k) => `
         <section class="exam-q">
           <div class="exam-qhead"><span>${t('pqx_qhead', { k: k + 1 })}</span>${q.marks ? `<span>${t('pq_marks', { n: q.marks })}</span>` : ''}<span class="src">${t('pqx_from', { s: src(q) })}</span></div>
-          ${q.img.map(s => `<img src="papers/${esc(s)}" alt="${esc(t('pq_alt', { n: q.q }))}">`).join('')}
+          ${q.img ? q.img.map(s => `<img src="papers/${esc(s)}" alt="${esc(t('pq_alt', { n: q.q }))}">`).join('') : `<p class="small">${esc(t('pqx_doQ', { n: q.q, url: q.qpUrl || t('pq_noPaper') }))}</p>`}
         </section>`).join('')}
       ${x.ans || x.ms ? `<section class="exam-answers"><h2>${t('pqx_answers')}</h2>
         ${qs.map((q, k) => `<div class="exam-q"><div class="exam-qhead"><span>${t('pqx_qhead', { k: k + 1 })}</span><span class="src">${src(q)}</span></div>
           ${x.ms && q.ms ? `<p class="small"><b>${t('pqx_msLabel')}</b> <span dir="ltr" lang="en">${esc(q.ms)}</span></p>` : ''}
-          ${(x.ans || x.ms) && (q.check === 'differs' || q.check === 'missing') ? `<p class="small"><b>${t('pq_fix')}</b> ${esc(pqNote(q))}</p>` : ''}
-          ${x.ans ? q.aimg.map(s => `<img src="papers/${esc(s)}" alt="${esc(t('pq_altA', { n: q.q }))}">`).join('') : ''}</div>`).join('')}
+          ${(x.ans || x.ms) && (q.check === 'differs' || q.check === 'missing') ? `<p class="small"><b>${q.img ? t('pq_fix') : t('pq_tip')}</b> ${esc(pqNote(q))}</p>` : ''}
+          ${!q.img && q.msUrl ? `<p class="small">${esc(t('pqx_msLabel'))} ${esc(q.msUrl)}</p>` : ''}
+          ${x.ans && q.aimg ? q.aimg.map(s => `<img src="papers/${esc(s)}" alt="${esc(t('pq_altA', { n: q.q }))}">`).join('') : ''}</div>`).join('')}
       </section>` : ''}
     </article>`;
   return `
